@@ -4,3 +4,6 @@ reportlab
 Django>=4.2
 djangorestframework
 reportlab
+Django
+djangorestframework
+reportlab

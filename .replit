@@ -1,4 +1,4 @@
-modules = ["web", "python-3.11"]
+modules = ["web", "python-3.12"]
 [agent]
 expertMode = true
 
@@ -42,6 +42,10 @@ args = "python manage.py migrate"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 37529
+externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
