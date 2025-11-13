@@ -9,11 +9,13 @@ A Django REST API web application for splitting expenses among friends. Built wi
 - **Port**: 5000 (configured for Replit webview)
 
 ## Key Features
+- **User Authentication**: Email/password login and registration system
 - Create and manage expense groups
 - Add members to groups
 - Track expenses with automatic equal-split calculation
 - View balance reports (who owes whom)
 - Settlement mapping using greedy algorithm to minimize transactions
+- Protected views requiring login for sensitive operations
 - Django admin panel for data management
 
 ## Project Structure
@@ -34,12 +36,27 @@ project/
 ```
 
 ## API Endpoints
+### Authentication
+- `GET/POST /api/login/` - User login with email and password
+- `GET/POST /api/register/` - User registration
+- `GET /api/logout/` - User logout
+
+### Expense Management
 - `POST /api/groups/` - Create a new expense group
 - `POST /api/groups/<group_id>/members/` - Add a member to a group
 - `POST /api/groups/<group_id>/expenses/` - Add an expense to a group
 - `GET /api/groups/<group_id>/report/` - Get balance report and settlement mapping
 
 ## Recent Changes
+- **2025-11-13**: Added email/password authentication system
+  - Implemented secure user registration with email and password
+  - Created login system with email-based authentication
+  - Added protected views requiring login (Add Member, Add Expense, Report)
+  - Implemented proper redirect flow preserving destination after login
+  - Added security measures: password hashing, CSRF protection, open redirect prevention
+  - Updated navigation to show Login/Register for guests, Logout for authenticated users
+  - Configured LOGIN_URL and redirect settings
+
 - **2025-11-13**: Complete application with web UI
   - Created Django project structure
   - Implemented models: Group, GroupMember, Expense
@@ -71,4 +88,7 @@ The application uses a greedy algorithm to minimize the number of transactions n
 - Django development server runs on 0.0.0.0:5000
 - ALLOWED_HOSTS configured for all hosts (development mode)
 - SQLite database for easy setup and portability
-- No authentication required for MVP (can be added later)
+- Authentication required for protected views (Add Member, Add Expense, Report)
+- Login uses email address instead of username for better UX
+- Passwords are hashed using Django's built-in authentication system
+- Open redirect protection implemented for secure login redirects
