@@ -1,9 +1,13 @@
 from rest_framework import generics, status, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model, authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib import messages
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.conf import settings
 from .models import Group, GroupMember, Expense, ExpensePayment, ExpenseSplit
 from .serializers import GroupSerializer, GroupMemberSerializer, ExpenseSerializer
 from decimal import Decimal
@@ -482,3 +486,65 @@ def group_report(request, group_id):
         'balances': balances_display,
         'settlements': settlements
     })
+
+def user_login(request):
+    next_url = request.POST.get('next') or request.GET.get('next', '')
+    
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+        
+        try:
+            user_obj = User.objects.get(email=email)
+            user = authenticate(request, username=user_obj.username, password=password)
+            
+            if user is not None:
+                login(request, user)
+                messages.success(request, 'Login successful!')
+                
+                if next_url and url_has_allowed_host_and_scheme(
+                    url=next_url,
+                    allowed_hosts={request.get_host()},
+                    require_https=request.is_secure()
+                ):
+                    return redirect(next_url)
+                return redirect(settings.LOGIN_REDIRECT_URL)
+            else:
+                messages.error(request, 'Invalid email or password.')
+        except User.DoesNotExist:
+            messages.error(request, 'Invalid email or password.')
+        except User.MultipleObjectsReturned:
+            messages.error(request, 'Multiple accounts found with this email. Please contact support.')
+    
+    return render(request, 'login.html', {'next': next_url})
+
+def user_register(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+        password_confirm = request.POST.get('password_confirm')
+        
+        if password != password_confirm:
+            messages.error(request, 'Passwords do not match.')
+            return render(request, 'register.html')
+        
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Username already exists.')
+            return render(request, 'register.html')
+        
+        if User.objects.filter(email=email).exists():
+            messages.error(request, 'Email already exists.')
+            return render(request, 'register.html')
+        
+        user = User.objects.create_user(username=username, email=email, password=password)
+        login(request, user)
+        messages.success(request, 'Registration successful!')
+        return redirect('home')
+    
+    return render(request, 'register.html')
+
+def user_logout(request):
+    logout(request)
+    messages.success(request, 'You have been logged out.')
+    return redirect('home')

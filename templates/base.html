@@ -245,9 +245,15 @@
             </button>
             <ul class="navbar-menu" id="navbarMenu">
                 <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">Groups</a></li>
-                <li><a href="/add-member/" class="{% if 'add-member' in request.path %}active{% endif %}">Add Member</a></li>
-                <li><a href="/add-expense/" class="{% if 'add-expense' in request.path %}active{% endif %}">Add Expense</a></li>
-                <li><a href="/report/" class="{% if 'report' in request.path %}active{% endif %}">Report</a></li>
+                {% if user.is_authenticated %}
+                    <li><a href="/add-member/" class="{% if 'add-member' in request.path %}active{% endif %}">Add Member</a></li>
+                    <li><a href="/add-expense/" class="{% if 'add-expense' in request.path %}active{% endif %}">Add Expense</a></li>
+                    <li><a href="/report/" class="{% if 'report' in request.path %}active{% endif %}">Report</a></li>
+                    <li><a href="{% url 'logout' %}" style="color: #dc3545;">Logout ({{ user.username }})</a></li>
+                {% else %}
+                    <li><a href="{% url 'login' %}" class="{% if 'login' in request.path %}active{% endif %}">Login</a></li>
+                    <li><a href="{% url 'register' %}" class="{% if 'register' in request.path %}active{% endif %}">Register</a></li>
+                {% endif %}
             </ul>
         </div>
     </nav>

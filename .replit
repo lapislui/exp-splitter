@@ -33,10 +33,6 @@ author = 49703479
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python manage.py makemigrations "
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
 args = "python manage.py migrate"
 
 [[ports]]
@@ -44,8 +40,8 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 37529
-externalPort = 3000
+localPort = 35975
+externalPort = 3001
 
 [nix]
 channel = "stable-25_05"

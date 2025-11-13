@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Register - Smart Expense Splitter{% endblock %}
+
+{% block content %}
+<header>
+    <h1>📝 Register</h1>
+    <p class="subtitle">Create your account to start splitting expenses</p>
+</header>
+
+<div style="max-width: 500px; margin: 0 auto;">
+    <div class="card">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}error{% else %}{{ message.tags }}{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Choose a username">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Create a password">
+            </div>
+
+            <div class="form-group">
+                <label for="password_confirm">Confirm Password</label>
+                <input type="password" id="password_confirm" name="password_confirm" required placeholder="Confirm your password">
+            </div>
+
+            <button type="submit" style="width: 100%;">Register</button>
+        </form>
+
+        <div style="margin-top: 20px; text-align: center; color: #666;">
+            Already have an account? <a href="{% url 'login' %}" style="color: #667eea; text-decoration: none; font-weight: 600;">Login here</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
