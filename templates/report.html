@@ -1,0 +1,208 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Settlement Report - Smart Expense Splitter{% endblock %}
+
+{% block extra_style %}
+<style>
+    .current-group {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .balance-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px;
+        margin-bottom: 8px;
+        background: #f5f5f5;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+    }
+
+    .balance-positive {
+        border-left-color: #4caf50;
+    }
+
+    .balance-negative {
+        border-left-color: #f44336;
+    }
+
+    .settlement-item {
+        padding: 15px;
+        margin-bottom: 10px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .arrow {
+        font-size: 1.5em;
+        color: #667eea;
+    }
+
+    .section-header {
+        color: #666;
+        margin: 30px 0 15px;
+        font-size: 1.3em;
+    }
+
+    @media (max-width: 768px) {
+        header h1 {
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            font-size: 1em;
+        }
+        
+        .card {
+            padding: 20px;
+        }
+        
+        .balance-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+        
+        .settlement-item {
+            flex-direction: column;
+            text-align: center;
+        }
+        
+        .arrow {
+            transform: rotate(90deg);
+        }
+    }
+    
+    @media (max-width: 480px) {
+        header h1 {
+            font-size: 1.5em;
+        }
+        
+        .card {
+            padding: 15px;
+        }
+        
+        .section-header {
+            font-size: 1.1em;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<header>
+    <h1>📊 Settlement Report</h1>
+    <p class="subtitle">See who owes whom</p>
+</header>
+
+<div id="alerts"></div>
+
+<div id="currentGroupInfo" class="current-group" style="display: none;"></div>
+
+<div class="card">
+    <h2>Financial Summary</h2>
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <button onclick="loadReport()">Refresh Report</button>
+        <button onclick="downloadPDF()" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">📄 Download PDF</button>
+    </div>
+    <div id="reportContent"></div>
+</div>
+
+<script>
+    let currentGroupId = localStorage.getItem('currentGroupId');
+    let currentGroupName = localStorage.getItem('currentGroupName');
+
+    async function showAlert(message, type = 'success') {
+        const alerts = document.getElementById('alerts');
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.textContent = message;
+        alerts.appendChild(alert);
+        setTimeout(() => alert.remove(), 5000);
+    }
+
+    function updateGroupInfo() {
+        const groupInfo = document.getElementById('currentGroupInfo');
+        if (currentGroupId && currentGroupName) {
+            groupInfo.textContent = `Current Group: ${currentGroupName}`;
+            groupInfo.style.display = 'block';
+        } else {
+            groupInfo.innerHTML = `
+                <div>No group selected. <a href="/" style="color: white; text-decoration: underline;">Select a group</a></div>
+            `;
+            groupInfo.style.display = 'block';
+        }
+    }
+
+    async function loadReport() {
+        if (!currentGroupId) {
+            showAlert('Please select a group first!', 'error');
+            return;
+        }
+
+        const response = await fetch(`/api/groups/${currentGroupId}/report/`);
+        const report = await response.json();
+
+        const userIdToName = {};
+        if (report.members) {
+            report.members.forEach(member => {
+                userIdToName[member.id] = member.username;
+            });
+        }
+
+        const reportContent = document.getElementById('reportContent');
+        
+        if (!report.members || report.members.length === 0) {
+            reportContent.innerHTML = '<p style="color: #666; text-align: center;">No members in this group yet.</p>';
+            return;
+        }
+
+        reportContent.innerHTML = `
+            <h3 class="section-header">💰 Member Balances</h3>
+            ${Object.entries(report.balances).map(([name, balance]) => `
+                <div class="balance-item ${balance > 0 ? 'balance-positive' : balance < 0 ? 'balance-negative' : ''}">
+                    <strong>${name}</strong>
+                    <span>${balance > 0 ? '+' : ''}$${balance.toFixed(2)}</span>
+                </div>
+            `).join('')}
+            
+            <h3 class="section-header">💸 Settlements Needed</h3>
+            ${report.settlements.length > 0 ? report.settlements.map(s => {
+                const fromUser = userIdToName[s.from_user] || 'Unknown';
+                const toUser = userIdToName[s.to_user] || 'Unknown';
+                return `
+                    <div class="settlement-item">
+                        <strong>${fromUser}</strong>
+                        <span class="arrow">→</span>
+                        <strong>${toUser}</strong>
+                        <span style="margin-left: auto; color: #667eea; font-weight: bold;">$${s.amount.toFixed(2)}</span>
+                    </div>
+                `;
+            }).join('') : '<p style="color: #666; text-align: center; padding: 20px;">All settled up! 🎉</p>'}
+        `;
+    }
+
+    function downloadPDF() {
+        if (!currentGroupId) {
+            showAlert('Please select a group first!', 'error');
+            return;
+        }
+        window.location.href = `/api/groups/${currentGroupId}/report/pdf/`;
+    }
+
+    updateGroupInfo();
+    if (currentGroupId) {
+        loadReport();
+    }
+</script>
+{% endblock %}

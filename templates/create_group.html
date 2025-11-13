@@ -1,0 +1,101 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Create Group - Smart Expense Splitter{% endblock %}
+
+{% block content %}
+<header>
+    <h1>📝 Create New Group</h1>
+    <p class="subtitle">Start splitting expenses with friends</p>
+</header>
+
+<div id="alerts"></div>
+
+<div class="card">
+    <h2>Group Details</h2>
+    <form id="createGroupForm">
+        <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="groupName" placeholder="e.g., Trip to Goa" required>
+        </div>
+        <div class="form-group">
+            <label>Your Name</label>
+            <input type="text" id="creatorName" placeholder="Your name" required>
+        </div>
+        <button type="submit">Create Group</button>
+    </form>
+</div>
+
+<script>
+    let users = JSON.parse(localStorage.getItem('users') || '{}');
+
+    async function showAlert(message, type = 'success') {
+        const alerts = document.getElementById('alerts');
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.textContent = message;
+        alerts.appendChild(alert);
+        setTimeout(() => alert.remove(), 5000);
+    }
+
+    async function getOrCreateUser(name) {
+        if (users[name]) {
+            return users[name];
+        }
+
+        const response = await fetch('/api/users/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: name,
+                email: `${name.toLowerCase().replace(/\s/g, '')}@example.com`,
+                password: 'password123'
+            })
+        });
+
+        if (response.ok) {
+            const user = await response.json();
+            users[name] = user.id;
+            localStorage.setItem('users', JSON.stringify(users));
+            return user.id;
+        }
+        return null;
+    }
+
+    document.getElementById('createGroupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const groupName = document.getElementById('groupName').value;
+        const creatorName = document.getElementById('creatorName').value;
+
+        const creatorId = await getOrCreateUser(creatorName);
+
+        const response = await fetch('/api/groups/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: groupName, created_by: creatorId})
+        });
+
+        if (response.ok) {
+            const group = await response.json();
+            localStorage.setItem('currentGroupId', group.id);
+            localStorage.setItem('currentGroupName', group.name);
+            
+            await fetch(`/api/groups/${group.id}/members/`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: creatorId})
+            });
+            
+            showAlert(`Group "${groupName}" created successfully!`);
+            document.getElementById('groupName').value = '';
+            document.getElementById('creatorName').value = '';
+            
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1500);
+        } else {
+            showAlert('Error creating group', 'error');
+        }
+    });
+</script>
+{% endblock %}

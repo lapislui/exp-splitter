@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Member - Smart Expense Splitter{% endblock %}
+
+{% block extra_style %}
+<style>
+    .current-group {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .user-badge {
+        display: inline-block;
+        background: #667eea;
+        color: white;
+        padding: 8px 15px;
+        border-radius: 20px;
+        margin: 5px;
+        font-size: 14px;
+    }
+
+    .members-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    @media (max-width: 768px) {
+        header h1 {
+            font-size: 2em;
+        }
+
+        .subtitle {
+            font-size: 1em;
+        }
+
+        .card {
+            padding: 20px;
+        }
+
+        input, select {
+            font-size: 16px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        header h1 {
+            font-size: 1.5em;
+        }
+
+        .card {
+            padding: 15px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<header>
+    <h1>👥 Add Member</h1>
+    <p class="subtitle">Invite friends to your group</p>
+</header>
+
+<div id="alerts"></div>
+
+<div id="currentGroupInfo" class="current-group" style="display: none;"></div>
+
+<div class="card">
+    <h2>Add New Member</h2>
+    <form id="addMemberForm">
+        <div class="form-group">
+            <label>Member Name</label>
+            <input type="text" id="memberName" placeholder="Friend's name" required>
+        </div>
+        <button type="submit">Add Member</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Current Members</h2>
+    <div id="membersList" class="members-grid"></div>
+</div>
+
+<!-- Create Group Section -->
+<div class="card">
+    <h2>Create New Group</h2>
+    <form id="createGroupForm">
+        <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="newGroupName" placeholder="Enter group name" required>
+        </div>
+        <button type="submit">Create Group</button>
+    </form>
+</div>
+
+<script>
+    let currentGroupId = localStorage.getItem('currentGroupId');
+    let currentGroupName = localStorage.getItem('currentGroupName');
+    let users = JSON.parse(localStorage.getItem('users') || '{}');
+
+    async function showAlert(message, type = 'success') {
+        const alerts = document.getElementById('alerts');
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.textContent = message;
+        alerts.appendChild(alert);
+        setTimeout(() => alert.remove(), 5000);
+    }
+
+    function updateGroupInfo() {
+        const groupInfo = document.getElementById('currentGroupInfo');
+        if (currentGroupId && currentGroupName) {
+            groupInfo.textContent = `Current Group: ${currentGroupName}`;
+            groupInfo.style.display = 'block';
+        } else {
+            groupInfo.innerHTML = `
+                <div>No group selected. <a href="/" style="color: white; text-decoration: underline;">Select a group</a></div>
+            `;
+            groupInfo.style.display = 'block';
+        }
+    }
+
+    async function getOrCreateUser(name) {
+        if (users[name]) {
+            return users[name];
+        }
+
+        const response = await fetch('/api/users/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: name,
+                email: `${name.toLowerCase().replace(/\s/g, '')}@example.com`,
+                password: 'password123'
+            })
+        });
+
+        if (response.ok) {
+            const user = await response.json();
+            users[name] = user.id;
+            localStorage.setItem('users', JSON.stringify(users));
+            return user.id;
+        }
+        return null;
+    }
+
+    async function loadMembers() {
+        if (!currentGroupId) return;
+
+        const response = await fetch(`/api/groups/${currentGroupId}/report/`);
+        const report = await response.json();
+
+        const membersList = document.getElementById('membersList');
+        membersList.innerHTML = '';
+
+        if (report.members && report.members.length > 0) {
+            report.members.forEach(member => {
+                users[member.username] = member.id;
+                const badge = document.createElement('span');
+                badge.className = 'user-badge';
+                badge.textContent = member.username;
+                membersList.appendChild(badge);
+            });
+            localStorage.setItem('users', JSON.stringify(users));
+        } else {
+            membersList.innerHTML = '<p style="color: #666;">No members yet</p>';
+        }
+    }
+
+    document.getElementById('addMemberForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!currentGroupId) {
+            showAlert('Please select a group first!', 'error');
+            return;
+        }
+
+        const memberName = document.getElementById('memberName').value;
+        const userId = await getOrCreateUser(memberName);
+
+        const response = await fetch(`/api/groups/${currentGroupId}/members/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: userId})
+        });
+
+        if (response.ok) {
+            showAlert(`${memberName} added to group!`);
+            document.getElementById('memberName').value = '';
+            loadMembers();
+        } else {
+            showAlert('Error adding member', 'error');
+        }
+    });
+
+    // Create Group functionality
+    document.getElementById('createGroupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const newGroupName = document.getElementById('newGroupName').value;
+
+        const response = await fetch('/api/groups/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: newGroupName})
+        });
+
+        if (response.ok) {
+            const group = await response.json();
+            showAlert(`Group "${newGroupName}" created successfully!`);
+            document.getElementById('newGroupName').value = '';
+
+            // Automatically select the newly created group
+            currentGroupId = group.id;
+            currentGroupName = group.name;
+            localStorage.setItem('currentGroupId', currentGroupId);
+            localStorage.setItem('currentGroupName', currentGroupName);
+            updateGroupInfo();
+            loadMembers(); // Load members for the new group
+        } else {
+            showAlert('Error creating group', 'error');
+        }
+    });
+
+    updateGroupInfo();
+    if (currentGroupId) {
+        loadMembers();
+    }
+</script>
+{% endblock %}

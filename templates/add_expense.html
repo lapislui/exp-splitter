@@ -1,0 +1,495 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Expense - Smart Expense Splitter{% endblock %}
+
+{% block extra_style %}
+<style>
+    .current-group {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .payment-entry {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+    }
+
+    .payment-entry-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .remove-payment {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .add-payment-btn {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-bottom: 20px;
+        width: 100%;
+    }
+
+    .member-checkbox {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        margin-bottom: 8px;
+    }
+
+    .member-checkbox input {
+        margin-right: 10px;
+        width: auto;
+    }
+
+    .member-checkbox label {
+        margin: 0;
+        cursor: pointer;
+        flex: 1;
+    }
+
+    .members-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .member-checkbox {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+
+    .member-checkbox:hover {
+        background: #e8e8e8;
+    }
+
+    .member-checkbox input[type="checkbox"] {
+        margin-right: 8px;
+        cursor: pointer;
+    }
+
+    .expenses-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+
+    .expenses-table th,
+    .expenses-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .expenses-table th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+    }
+
+    .expenses-table tr:hover {
+        background: #f5f5f5;
+    }
+
+    .expense-detail {
+        font-size: 0.9em;
+        color: #666;
+        margin: 2px 0;
+    }
+
+    .payment-info {
+        background: #e3f2fd;
+        padding: 5px 10px;
+        border-radius: 4px;
+        display: inline-block;
+        margin: 2px;
+        font-size: 0.85em;
+    }
+
+    .split-info {
+        background: #fff3e0;
+        padding: 5px 10px;
+        border-radius: 4px;
+        display: inline-block;
+        margin: 2px;
+        font-size: 0.85em;
+    }
+
+    @media (max-width: 768px) {
+        header h1 {
+            font-size: 2em;
+        }
+
+        .subtitle {
+            font-size: 1em;
+        }
+
+        .card {
+            padding: 20px;
+        }
+
+        .payment-entry {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .payment-entry select,
+        .payment-entry input {
+            width: 100%;
+        }
+
+        .members-container {
+            grid-template-columns: 1fr;
+        }
+
+        .expenses-table {
+            font-size: 0.85em;
+        }
+
+        .expenses-table th,
+        .expenses-table td {
+            padding: 8px;
+        }
+
+        .payment-info,
+        .split-info {
+            display: block;
+            margin: 5px 0;
+        }
+    }
+
+    @media (max-width: 480px) {
+        header h1 {
+            font-size: 1.5em;
+        }
+
+        .card {
+            padding: 15px;
+        }
+
+        .expenses-table {
+            font-size: 0.75em;
+        }
+
+        .expenses-table th,
+        .expenses-table td {
+            padding: 6px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<header>
+    <h1>💳 Add Expense</h1>
+    <p class="subtitle">Record a new expense with multiple payers</p>
+</header>
+
+<div id="alerts"></div>
+
+<div id="currentGroupInfo" class="current-group" style="display: none;"></div>
+
+<div class="card">
+    <h2>Expense Details</h2>
+    <form id="addExpenseForm">
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="description" placeholder="What was it for?" required>
+        </div>
+
+        <h3>Who Paid?</h3>
+        <div id="paymentsContainer"></div>
+        <button type="button" class="add-payment-btn" onclick="addPaymentEntry()">+ Add Payer</button>
+
+        <h3>Split Between (uncheck to exclude)</h3>
+        <div id="membersContainer" class="members-container"></div>
+
+        <button type="submit">Add Expense</button>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 30px;">
+    <h2>📋 Expenses History</h2>
+    <div id="expensesTableContainer">
+        <p style="color: #666; text-align: center;">Loading expenses...</p>
+    </div>
+</div>
+
+<script>
+    let currentGroupId = localStorage.getItem('currentGroupId');
+    let currentGroupName = localStorage.getItem('currentGroupName');
+    let members = [];
+    let paymentCount = 0;
+
+    async function showAlert(message, type = 'success') {
+        const alerts = document.getElementById('alerts');
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.textContent = message;
+        alerts.appendChild(alert);
+        setTimeout(() => alert.remove(), 5000);
+    }
+
+    function updateGroupInfo() {
+        const groupInfo = document.getElementById('currentGroupInfo');
+        if (currentGroupId && currentGroupName) {
+            groupInfo.textContent = `Current Group: ${currentGroupName}`;
+            groupInfo.style.display = 'block';
+        } else {
+            groupInfo.innerHTML = `
+                <div>No group selected. <a href="/" style="color: white; text-decoration: underline;">Select a group</a></div>
+            `;
+            groupInfo.style.display = 'block';
+        }
+    }
+
+    async function loadMembers() {
+        if (!currentGroupId) return;
+
+        const response = await fetch(`/api/groups/${currentGroupId}/report/`);
+        const report = await response.json();
+
+        if (report.members) {
+            members = report.members;
+            renderMemberCheckboxes();
+            addPaymentEntry();
+        }
+    }
+
+    async function loadExpenses() {
+        if (!currentGroupId) {
+            document.getElementById('expensesTableContainer').innerHTML = '<p style="color: #666; text-align: center;">No group selected.</p>';
+            return;
+        }
+
+        const response = await fetch(`/api/groups/${currentGroupId}/expenses/`);
+        const expenses = await response.json();
+        renderExpensesTable(expenses);
+    }
+
+    function renderMemberCheckboxes() {
+        const container = document.getElementById('membersContainer');
+        container.innerHTML = '';
+
+        members.forEach(member => {
+            const div = document.createElement('div');
+            div.className = 'member-checkbox';
+            div.innerHTML = `
+                <input type="checkbox" id="member_${member.id}" value="${member.id}" checked>
+                <label for="member_${member.id}">${member.username}</label>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function addPaymentEntry() {
+        paymentCount++;
+        const container = document.getElementById('paymentsContainer');
+        const div = document.createElement('div');
+        div.className = 'payment-entry';
+        div.id = `payment_${paymentCount}`;
+
+        div.innerHTML = `
+            <div class="payment-entry-header">
+                <strong>Payment #${paymentCount}</strong>
+                ${paymentCount > 1 ? `<button type="button" class="remove-payment" onclick="removePayment(${paymentCount})">Remove</button>` : ''}
+            </div>
+            <div class="form-group">
+                <label>Who Paid?</label>
+                <select id="payer_${paymentCount}" class="payer-select" required>
+                    <option value="">Select member</option>
+                    ${members.map(m => `<option value="${m.id}">${m.username}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Amount Paid</label>
+                <input type="number" id="amount_${paymentCount}" class="amount-input" step="0.01" placeholder="0.00" required>
+            </div>
+        `;
+
+        container.appendChild(div);
+    }
+
+    function removePayment(id) {
+        const element = document.getElementById(`payment_${id}`);
+        if (element) {
+            element.remove();
+        }
+    }
+
+    function renderExpensesTable(expenses) {
+        const container = document.getElementById('expensesTableContainer');
+        if (!expenses || expenses.length === 0) {
+            container.innerHTML = '<p style="color: #666; text-align: center;">No expenses recorded yet.</p>';
+            return;
+        }
+
+        let tableHTML = `
+            <table class="expenses-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Amount</th>
+                        <th>Paid By</th>
+                        <th>For Whom</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        expenses.forEach(expense => {
+            tableHTML += `
+                <tr>
+                    <td>
+                        ${expense.description}
+                        <div class="expense-detail">${new Date(expense.date).toLocaleDateString()}</div>
+                    </td>
+                    <td>$${parseFloat(expense.amount).toFixed(2)}</td>
+                    <td>
+                        ${expense.payments && expense.payments.length > 0 
+                            ? expense.payments.map(p => `<span class="payment-info">${p.payer_username || 'Unknown'} paid $${parseFloat(p.amount).toFixed(2)}</span>`).join('')
+                            : 'No payments'}
+                    </td>
+                    <td>
+                        ${expense.splits && expense.splits.length > 0
+                            ? expense.splits.map(s => `<span class="split-info">${s.member_username || 'Unknown'} owes $${parseFloat(s.share).toFixed(2)}</span>`).join('')
+                            : 'No splits'}
+                    </td>
+                </tr>
+            `;
+        });
+
+        tableHTML += `
+                </tbody>
+            </table>
+        `;
+        container.innerHTML = tableHTML;
+    }
+
+    async function addExpense(e) {
+        e.preventDefault();
+
+        if (!currentGroupId) {
+            showAlert('Please select a group first!', 'error');
+            return;
+        }
+
+        const description = document.getElementById('description').value;
+
+        // Collect all payments
+        const payments = [];
+        const paymentEntries = document.querySelectorAll('.payment-entry');
+        let totalPaid = 0;
+
+        paymentEntries.forEach(entry => {
+            const payerId = entry.querySelector('.payer-select').value;
+            const amount = parseFloat(entry.querySelector('.amount-input').value) || 0;
+
+            if (payerId && amount > 0) {
+                payments.push({
+                    payer: parseInt(payerId),
+                    amount: amount.toFixed(2)
+                });
+                totalPaid += amount;
+            }
+        });
+
+        if (payments.length === 0) {
+            showAlert('Please add at least one payment!', 'error');
+            return;
+        }
+
+        // Collect splits (checked members)
+        const splits = [];
+        const memberCheckboxes = document.querySelectorAll('#membersContainer input[type="checkbox"]:checked');
+
+        if (memberCheckboxes.length === 0) {
+            showAlert('Please select at least one member to split the expense!', 'error');
+            return;
+        }
+
+        // Calculate equal share for each selected member
+        const sharePerMember = (totalPaid / memberCheckboxes.length).toFixed(2);
+        const sharePerMemberDecimal = parseFloat(sharePerMember);
+        let totalAllocated = 0;
+
+        memberCheckboxes.forEach((cb, index) => {
+            // For the last member, adjust to ensure total equals totalPaid (handle rounding)
+            let share;
+            if (index === memberCheckboxes.length - 1) {
+                share = (totalPaid - totalAllocated).toFixed(2);
+            } else {
+                share = sharePerMember;
+                totalAllocated += sharePerMemberDecimal;
+            }
+
+            splits.push({
+                member: parseInt(cb.value),
+                share: share
+            });
+        });
+
+        const response = await fetch(`/api/groups/${currentGroupId}/expenses/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                description,
+                amount: totalPaid.toFixed(2),
+                payments,
+                splits
+            })
+        });
+
+        if (response.ok) {
+            showAlert('Expense added successfully!');
+            document.getElementById('addExpenseForm').reset();
+            // Clear and re-render payments and members to reflect the new state
+            document.getElementById('paymentsContainer').innerHTML = '';
+            paymentCount = 0;
+            addPaymentEntry(); // Add one default payment entry
+            loadMembers(); // Re-render checkboxes to reset their state
+            document.getElementById('description').value = ''; // Clear description
+            loadExpenses(); // Reload expenses to show in table
+        } else {
+            const error = await response.json();
+            showAlert(error.error || 'Error adding expense', 'error');
+        }
+    }
+
+    document.getElementById('addExpenseForm').addEventListener('submit', addExpense);
+
+    updateGroupInfo();
+    if (currentGroupId) {
+        loadMembers();
+        loadExpenses(); // Load expenses when the page loads
+    }
+</script>
+{% endblock %}
