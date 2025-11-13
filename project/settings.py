@@ -5,6 +5,9 @@ SECRET_KEY = 'dev-secret-for-replit'
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
+# Ensure URLs with trailing slashes work
+APPEND_SLASH = True
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

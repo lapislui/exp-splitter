@@ -46,11 +46,13 @@ class ExpenseSerializer(serializers.ModelSerializer):
     payments = ExpensePaymentSerializer(many=True, read_only=True)
     splits = ExpenseSplitSerializer(many=True, read_only=True)
     total_amount = serializers.SerializerMethodField()
+    date = serializers.DateTimeField(source='created_at', read_only=True)
     
     class Meta:
         model = Expense
-        fields = ['id', 'group', 'description', 'created_at', 'payments', 'splits', 'total_amount']
+        fields = ['id', 'group', 'description', 'date', 'created_at', 'payments', 'splits', 'total_amount']
         read_only_fields = ['group']
     
     def get_total_amount(self, obj):
-        return obj.total_amount()
+        # Total amount is the sum of all splits (what needs to be divided)
+        return sum(split.share for split in obj.splits.all())

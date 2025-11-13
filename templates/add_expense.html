@@ -225,6 +225,12 @@
             <input type="text" id="description" placeholder="What was it for?" required>
         </div>
 
+        <div class="form-group">
+            <label>Total Expense Amount</label>
+            <input type="number" id="totalExpense" step="0.01" placeholder="0.00" required>
+            <small style="color: #666;">This should match the sum of all payments below</small>
+        </div>
+
         <h3>Who Paid?</h3>
         <div id="paymentsContainer"></div>
         <button type="button" class="add-payment-btn" onclick="addPaymentEntry()">+ Add Payer</button>
@@ -357,7 +363,7 @@
                 <thead>
                     <tr>
                         <th>Description</th>
-                        <th>Amount</th>
+                        <th>Total Expense</th>
                         <th>Paid By</th>
                         <th>For Whom</th>
                     </tr>
@@ -366,21 +372,64 @@
         `;
 
         expenses.forEach(expense => {
+            // Calculate total expense from splits (this is the actual total that needs to be split)
+            let totalExpense = 0;
+            if (expense.splits && expense.splits.length > 0) {
+                totalExpense = expense.splits.reduce((sum, s) => sum + parseFloat(s.share || 0), 0);
+            }
+
+            // Get the date - use created_at field and format it properly
+            const dateValue = expense.created_at;
+            let formattedDate = 'N/A';
+            if (dateValue) {
+                const date = new Date(dateValue);
+                formattedDate = date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            // Create a set of payer IDs for quick lookup
+            const payerIds = new Set();
+            if (expense.payments) {
+                expense.payments.forEach(p => {
+                    payerIds.add(p.payer);
+                });
+            }
+
             tableHTML += `
                 <tr>
                     <td>
-                        ${expense.description}
-                        <div class="expense-detail">${new Date(expense.date).toLocaleDateString()}</div>
+                        ${expense.description || 'No description'}
+                        <div class="expense-detail">${formattedDate}</div>
                     </td>
-                    <td>$${parseFloat(expense.amount).toFixed(2)}</td>
+                    <td>$${totalExpense.toFixed(2)}</td>
                     <td>
                         ${expense.payments && expense.payments.length > 0 
-                            ? expense.payments.map(p => `<span class="payment-info">${p.payer_username || 'Unknown'} paid $${parseFloat(p.amount).toFixed(2)}</span>`).join('')
+                            ? expense.payments.map(p => {
+                                const paidAmount = parseFloat(p.amount || 0);
+                                return `<span class="payment-info">${p.payer_username || 'Unknown'} paid $${paidAmount.toFixed(2)}</span>`;
+                            }).join('')
                             : 'No payments'}
                     </td>
                     <td>
                         ${expense.splits && expense.splits.length > 0
-                            ? expense.splits.map(s => `<span class="split-info">${s.member_username || 'Unknown'} owes $${parseFloat(s.share).toFixed(2)}</span>`).join('')
+                            ? expense.splits.map(s => {
+                                const share = parseFloat(s.share || 0);
+                                // Find how much this member paid
+                                const memberPayment = expense.payments?.find(p => p.payer === s.member);
+                                const amountPaid = memberPayment ? parseFloat(memberPayment.amount || 0) : 0;
+                                const owes = share - amountPaid;
+
+                                // Show if they owe money (even if they also paid something)
+                                if (owes > 0.01) {
+                                    return `<span class="split-info">${s.member_username || 'Unknown'} owes $${owes.toFixed(2)}</span>`;
+                                }
+                                return '';
+                            }).filter(s => s).join('')
                             : 'No splits'}
                     </td>
                 </tr>
@@ -394,6 +443,7 @@
         container.innerHTML = tableHTML;
     }
 
+
     async function addExpense(e) {
         e.preventDefault();
 
@@ -403,11 +453,18 @@
         }
 
         const description = document.getElementById('description').value;
+        const totalExpense = parseFloat(document.getElementById('totalExpense').value) || 0;
+
+        if (totalExpense <= 0) {
+            showAlert('Total expense must be greater than 0!', 'error');
+            return;
+        }
 
         // Collect all payments
         const payments = [];
         const paymentEntries = document.querySelectorAll('.payment-entry');
         let totalPaid = 0;
+        const payerIds = new Set();
 
         paymentEntries.forEach(entry => {
             const payerId = entry.querySelector('.payer-select').value;
@@ -419,6 +476,7 @@
                     amount: amount.toFixed(2)
                 });
                 totalPaid += amount;
+                payerIds.add(parseInt(payerId));
             }
         });
 
@@ -427,7 +485,13 @@
             return;
         }
 
-        // Collect splits (checked members)
+        // Verify that total paid matches total expense
+        if (Math.abs(totalPaid - totalExpense) > 0.01) {
+            showAlert(`Total payments ($${totalPaid.toFixed(2)}) must match total expense ($${totalExpense.toFixed(2)})!`, 'error');
+            return;
+        }
+
+        // Collect splits (checked members) - includes payers if they're checked
         const splits = [];
         const memberCheckboxes = document.querySelectorAll('#membersContainer input[type="checkbox"]:checked');
 
@@ -436,23 +500,23 @@
             return;
         }
 
-        // Calculate equal share for each selected member
-        const sharePerMember = (totalPaid / memberCheckboxes.length).toFixed(2);
-        const sharePerMemberDecimal = parseFloat(sharePerMember);
+        // Calculate equal share for each selected member (including payers)
+        const sharePerMember = totalExpense / memberCheckboxes.length;
         let totalAllocated = 0;
 
         memberCheckboxes.forEach((cb, index) => {
-            // For the last member, adjust to ensure total equals totalPaid (handle rounding)
+            const memberId = parseInt(cb.value);
+            // For the last member, adjust to ensure total equals totalExpense (handle rounding)
             let share;
             if (index === memberCheckboxes.length - 1) {
-                share = (totalPaid - totalAllocated).toFixed(2);
+                share = (totalExpense - totalAllocated).toFixed(2);
             } else {
-                share = sharePerMember;
-                totalAllocated += sharePerMemberDecimal;
+                share = sharePerMember.toFixed(2);
+                totalAllocated += parseFloat(share);
             }
 
             splits.push({
-                member: parseInt(cb.value),
+                member: memberId,
                 share: share
             });
         });
@@ -462,7 +526,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 description,
-                amount: totalPaid.toFixed(2),
+                amount: totalExpense.toFixed(2),
                 payments,
                 splits
             })
@@ -477,6 +541,7 @@
             addPaymentEntry(); // Add one default payment entry
             loadMembers(); // Re-render checkboxes to reset their state
             document.getElementById('description').value = ''; // Clear description
+            document.getElementById('totalExpense').value = ''; // Clear total expense
             loadExpenses(); // Reload expenses to show in table
         } else {
             const error = await response.json();

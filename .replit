@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["web", "python-3.11"]
 [agent]
 expertMode = true
 
@@ -33,7 +33,7 @@ author = 49703479
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python manage.py makemigrations"
+args = "python manage.py makemigrations "
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 
 {% block title %}Groups - Smart Expense Splitter{% endblock %}
@@ -167,7 +166,7 @@
         .groups-container {
             grid-template-columns: 1fr;
         }
-        
+
         h1 {
             font-size: 2.5em;
         }
@@ -364,49 +363,44 @@
         const groupName = document.getElementById('groupName').value;
         const creatorName = document.getElementById('creatorName').value;
 
-        if (!groupName || !creatorName) {
-            showAlert('Please fill in all fields', 'error');
-            return;
-        }
-
         try {
-            const creatorId = await getOrCreateUser(creatorName);
-
-            if (!creatorId) {
-                showAlert('Error creating user', 'error');
-                return;
-            }
-
-            const response = await fetch('/api/groups/', {
+            // First, create or get the user
+            const userResponse = await fetch('/api/users/create/', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name: groupName, created_by: creatorId})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: creatorName,
+                    email: `${creatorName.toLowerCase().replace(/\s+/g, '')}@example.com`
+                })
             });
 
-            if (response.ok) {
-                const group = await response.json();
-                localStorage.setItem('currentGroupId', group.id);
-                localStorage.setItem('currentGroupName', group.name);
-                
-                await fetch(`/api/groups/${group.id}/members/`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({user_id: creatorId})
-                });
-                
-                showAlert(`Group "${groupName}" created successfully!`);
-                document.getElementById('groupName').value = '';
-                document.getElementById('creatorName').value = '';
-                
-                loadGroups();
-            } else {
-                const errorData = await response.json();
-                console.error('Error creating group:', errorData);
-                showAlert('Error creating group: ' + (errorData.detail || 'Unknown error'), 'error');
+            if (!userResponse.ok) {
+                throw new Error(`Failed to create user: ${userResponse.status}`);
             }
+
+            const user = await userResponse.json();
+
+            // Now create the group with the user ID
+            const groupResponse = await fetch('/api/groups/create/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: groupName,
+                    created_by: user.id
+                })
+            });
+
+            if (!groupResponse.ok) {
+                throw new Error(`Failed to create group: ${groupResponse.status}`);
+            }
+
+            const group = await groupResponse.json();
+            showAlert(`Group "${groupName}" created successfully!`, 'success');
+            document.getElementById('createGroupForm').reset();
+            loadGroups();
         } catch (error) {
             console.error('Error:', error);
-            showAlert('Error creating group', 'error');
+            showAlert('Error creating group: ' + error.message, 'error');
         }
     });
 

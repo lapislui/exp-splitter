@@ -22,14 +22,16 @@ def create_user(request):
     if not username:
         return Response({'error': 'username is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user, created = User.objects.get_or_create(
-        username=username,
-        defaults={'email': email or f'{username}@example.com'}
-    )
-
-    if created and password:
-        user.set_password(password)
-        user.save()
+    try:
+        user = User.objects.get(username=username)
+        created = False
+    except User.DoesNotExist:
+        user = User.objects.create_user(
+            username=username,
+            email=email or f'{username}@example.com',
+            password=password
+        )
+        created = True
 
     return Response({'id': user.id, 'username': user.username, 'email': user.email})
 
@@ -50,11 +52,15 @@ class GroupListCreate(generics.ListCreateAPIView):
                 username='default_user',
                 defaults={'email': 'default@example.com'}
             )
-            serializer.save(created_by=default_user)
+            group = serializer.save(created_by=default_user)
+            # Add creator as member
+            GroupMember.objects.get_or_create(group=group, user=default_user)
         else:
-            serializer.save()
+            group = serializer.save()
+            # Add creator as member
+            GroupMember.objects.get_or_create(group=group, user=created_by)
 
-class AddMemberView(generics.CreateAPIView):
+class AddMemberView(generics.GenericAPIView):
     serializer_class = GroupMemberSerializer
 
     @csrf_exempt
@@ -62,6 +68,9 @@ class AddMemberView(generics.CreateAPIView):
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, group_id):
+        print(f"AddMemberView called with group_id={group_id}")
+        print(f"Request data: {request.data}")
+        
         group = get_object_or_404(Group, pk=group_id)
         user_id = request.data.get('user_id')
 
@@ -73,7 +82,7 @@ class AddMemberView(generics.CreateAPIView):
 
         user = get_object_or_404(User, pk=user_id)
         gm, created = GroupMember.objects.get_or_create(group=group, user=user)
-        return Response({'id': gm.id, 'created': created})
+        return Response({'id': gm.id, 'created': created}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 class ExpenseListCreate(generics.ListCreateAPIView):
     serializer_class = ExpenseSerializer
@@ -321,6 +330,59 @@ def download_report_pdf(request, group_id):
     else:
         all_settled = Paragraph("All settled up! 🎉", styles['Normal'])
         elements.append(all_settled)
+
+    elements.append(Spacer(1, 0.4*inch))
+
+    # Expense History Section
+    expense_history_heading = Paragraph("Expense History", heading_style)
+    elements.append(expense_history_heading)
+
+    if expenses:
+        expense_data = [['Description', 'Total', 'Paid By', 'Split Among']]
+        for exp in expenses:
+            # Calculate total expense from splits
+            total_exp = sum(split.share for split in exp.splits.all())
+            
+            # Get payers info
+            payers_info = []
+            for payment in exp.payments.all():
+                payer_name = user_id_to_name.get(payment.payer.id, 'Unknown')
+                payers_info.append(f"{payer_name} (${payment.amount:.2f})")
+            payers_str = ', '.join(payers_info) if payers_info else 'N/A'
+            
+            # Get split members info
+            split_members = []
+            for split in exp.splits.all():
+                member_name = user_id_to_name.get(split.member.id, 'Unknown')
+                split_members.append(f"{member_name} (${split.share:.2f})")
+            splits_str = ', '.join(split_members) if split_members else 'N/A'
+            
+            expense_data.append([
+                exp.description or 'No description',
+                f"${total_exp:.2f}",
+                payers_str,
+                splits_str
+            ])
+
+        expense_table = Table(expense_data, colWidths=[1.8*inch, 0.8*inch, 1.8*inch, 1.8*inch])
+        expense_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP')
+        ]))
+        elements.append(expense_table)
+    else:
+        no_expenses = Paragraph("No expenses recorded yet.", styles['Normal'])
+        elements.append(no_expenses)
 
     doc.build(elements)
     buffer.seek(0)
