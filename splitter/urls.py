@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.decorators.csrf import csrf_exempt  # ADD THIS
 from .views import (
     GroupListCreate, AddMemberView, ExpenseListCreate,
     create_user, get_group_members, group_report, download_report_pdf,
@@ -8,7 +9,7 @@ from .views import (
 urlpatterns = [
     path('groups/', GroupListCreate.as_view(), name='group-list'),
     path('groups/create/', GroupListCreate.as_view(), name='group-create'),
-    path('users/create/', create_user, name='create-user'),
+    path('users/create/', csrf_exempt(create_user), name='create-user'),  # WRAP WITH csrf_exempt
     path('groups/<int:group_id>/members/list/', get_group_members, name='group-members'),
     path('groups/<int:group_id>/members/', AddMemberView.as_view(), name='add-member'),
     path('groups/<int:group_id>/expenses/', ExpenseListCreate.as_view(), name='expense-list'),
